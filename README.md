@@ -21,6 +21,7 @@ We have a "[Spin Pro Laravel Template](https://getspin.pro)" that includes more 
 | Vite over HTTPS | ❌ | ✅ |
 | Databases | SQLite | ✅ MariaDB, MySQL, PostgreSQL, SQLite |
 | Redis | ❌ | ✅ |
+| Meilisearch |  ❌ | ✅ |
 | Laravel Horizon | ❌ | ✅ |
 | Laravel Reverb | ❌ | ✅ |
 | Laravel Queues | ❌ | ✅ |
