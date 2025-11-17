@@ -28,6 +28,59 @@ services:
       - source: traefik
         target: /etc/traefik/traefik.yml
 
+  mariadb:
+    image: mariadb:12
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_USER: ${DB_USERNAME}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - web-public
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 120s
+      placement:
+        constraints:
+          - node.role == worker
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - sh
+      - -c
+      - |
+        redis-server --appendonly yes --save "60 1" $${REDIS_PASSWORD:+--requirepass "$$REDIS_PASSWORD"}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli $${REDIS_PASSWORD:+-a $$REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - web-public
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 120s
+
   php:
     image: ${SPIN_IMAGE_DOCKERFILE} # 👈 Change this if you're not using `spin deploy`
     environment:
@@ -36,6 +89,15 @@ services:
       APP_ENV: "${SPIN_DEPLOYMENT_ENVIRONMENT}" # 👈 Remove this if you're not using `spin deploy`
       HEALTHCHECK_PATH: "/up" # Use Laravel's built-in health route
       SSL_MODE: full
+      DB_CONNECTION: ${DB_CONNECTION:-mysql}
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     networks:
       - web-public
     volumes:
@@ -73,6 +135,78 @@ services:
         - "traefik.http.services.my-php-app.loadbalancer.healthcheck.timeout=5s"
         - "traefik.http.services.my-php-app.loadbalancer.healthcheck.scheme=http"
 
+  queue:
+    image: ${SPIN_IMAGE_DOCKERFILE}
+    command: php artisan queue:work --sleep=3 --timeout=120 --tries=3
+    environment:
+      APP_ENV: ${SPIN_DEPLOYMENT_ENVIRONMENT:-production}
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      DB_CONNECTION: ${DB_CONNECTION:-mysql}
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - web-public
+    deploy:
+      mode: replicated
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+
+  reverb:
+    image: ${SPIN_IMAGE_DOCKERFILE}
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    environment:
+      APP_ENV: ${SPIN_DEPLOYMENT_ENVIRONMENT:-production}
+      BROADCAST_CONNECTION: reverb
+      REVERB_HOST: ${REVERB_HOST}
+      REVERB_PORT: ${REVERB_PORT:-8080}
+      REVERB_SCHEME: ${REVERB_SCHEME:-https}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    expose:
+      - "8080"
+    networks:
+      - web-public
+    deploy:
+      mode: replicated
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.reverb.rule=Host(`${REVERB_HOST}`)"
+        - "traefik.http.routers.reverb.entrypoints=websecure"
+        - "traefik.http.routers.reverb.tls=true"
+        - "traefik.http.routers.reverb.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.reverb.loadbalancer.server.port=8080"
+
 configs:
   traefik:
     name: "traefik-${SPIN_MD5_HASH_TRAEFIK_YML}.yml"
@@ -85,6 +219,8 @@ volumes:
   storage_sessions:
   storage_logs:
   database_sqlite:
+  mariadb-data:
+  redis-data:
 
 networks:
   web-public:
