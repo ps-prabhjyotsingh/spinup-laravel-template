@@ -144,7 +144,10 @@ services:
       - "traefik.http.services.reverb.loadbalancer.server.port=8080"
     networks:
       - development
-    restart: unless-stopped
+    # Disabled by default - enable after: composer require laravel/reverb && php artisan reverb:install
+    restart: "no"
+    profiles:
+      - reverb
   
   node:
     image: node:20-alpine
@@ -159,7 +162,10 @@ services:
       - "5173:5173"
     networks:
       - development
-    restart: unless-stopped
+    # Don't restart automatically - run manually with: spin exec node npm run dev
+    restart: "no"
+    profiles:
+      - tools
 
   mailpit:
     image: axllent/mailpit:latest
