@@ -44,10 +44,29 @@ RUN echo "user = www-data" >> /usr/local/etc/php-fpm.d/docker-php-serversideup-p
     echo "group = www-data" >> /usr/local/etc/php-fpm.d/docker-php-serversideup-pool.conf
 
 ############################################
+# Node.js Assets Builder (Optional)
+############################################
+# Uncomment this stage if you want to build assets during Docker build
+# Otherwise, build assets in CI before building the Docker image
+
+# FROM node:20-alpine AS assets
+# WORKDIR /app
+# COPY package*.json yarn.lock* ./
+# RUN corepack enable && \
+#     if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
+#     else npm ci; fi
+# COPY . .
+# RUN if [ -f yarn.lock ]; then yarn build; \
+#     else npm run build; fi
+
+############################################
 # Production Image
 ############################################
 FROM base AS deploy
 COPY --chown=www-data:www-data . /var/www/html
+
+# If using the assets stage above, copy built assets
+# COPY --from=assets --chown=www-data:www-data /app/public/build /var/www/html/public/build
 
 # Create the SQLite directory and set the owner to www-data (remove this if you're not using SQLite)
 RUN mkdir -p /var/www/html/.infrastructure/volume_data/sqlite/ && \

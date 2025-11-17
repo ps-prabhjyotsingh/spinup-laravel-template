@@ -111,6 +111,93 @@ This template includes the following services configured and ready to use:
   - `spin exec node yarn install` (after enabling Corepack)
   - `spin exec node yarn dev`
 
+## 📡 Setting Up Laravel Reverb
+
+The template includes a Reverb service, but you need to install the Laravel Reverb package in your project:
+
+### Installation
+
+```bash
+# Install Reverb package
+spin exec php composer require laravel/reverb
+
+# Publish Reverb configuration (if needed)
+spin exec php php artisan reverb:install
+```
+
+### Configuration
+
+Reverb is already configured in `.env.example`. Ensure your Laravel project has these settings:
+
+```env
+BROADCAST_CONNECTION=reverb
+REVERB_APP_ID=my-app-id
+REVERB_APP_KEY=my-app-key
+REVERB_APP_SECRET=my-app-secret
+REVERB_HOST=reverb.localhost
+REVERB_PORT=80
+REVERB_SCHEME=http
+```
+
+### Broadcasting Configuration
+
+Modern Laravel versions (11+) include Reverb support out-of-the-box. For older versions, add to `config/broadcasting.php`:
+
+```php
+'reverb' => [
+    'driver' => 'reverb',
+    'key' => env('REVERB_APP_KEY'),
+    'secret' => env('REVERB_APP_SECRET'),
+    'app_id' => env('REVERB_APP_ID'),
+    'options' => [
+        'host' => env('REVERB_HOST'),
+        'port' => env('REVERB_PORT', 80),
+        'scheme' => env('REVERB_SCHEME', 'http'),
+    ],
+],
+```
+
+### Frontend Setup
+
+Install Laravel Echo and configure it to use Reverb:
+
+```bash
+spin exec node npm install --save-dev laravel-echo pusher-js
+```
+
+In your `resources/js/bootstrap.js`:
+
+```javascript
+import Echo from 'laravel-echo';
+import Pusher from 'pusher-js';
+
+window.Pusher = Pusher;
+
+window.Echo = new Echo({
+    broadcaster: 'reverb',
+    key: import.meta.env.VITE_REVERB_APP_KEY,
+    wsHost: import.meta.env.VITE_REVERB_HOST,
+    wsPort: import.meta.env.VITE_REVERB_PORT ?? 80,
+    wssPort: import.meta.env.VITE_REVERB_PORT ?? 80,
+    forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
+    enabledTransports: ['ws', 'wss'],
+});
+```
+
+### Testing Reverb
+
+```bash
+# Restart the Reverb service
+docker compose restart reverb
+
+# View Reverb logs
+docker compose logs -f reverb
+
+# Access Reverb
+# Development: http://reverb.localhost
+# Production: https://your-reverb-domain.com
+```
+
 ## 👉 Required Changes Before Using This Template
 > [!CAUTION]
 > You need to make changes before using this template.
@@ -319,6 +406,51 @@ Your project folder is mounted as `/var/www/html` inside the container. You simp
 
 ### Production Setup For SQLite
 We automatically create a `database_sqlite` volume in production. This volume is mounted to `/var/www/html/.infrastructure/volume_data/sqlite/` to the `php` service.
+
+## 🏗️ Building Assets for Production
+
+For production deployments, you have two options for building front-end assets:
+
+### Option A: Build in CI/CD (Recommended)
+Build assets before creating your Docker image:
+
+```bash
+# Using npm
+docker run --rm -v "$PWD":/app -w /app node:20-alpine sh -c "corepack enable && npm ci && npm run build"
+
+# Using yarn
+docker run --rm -v "$PWD":/app -w /app node:20-alpine sh -c "corepack enable && yarn install --frozen-lockfile && yarn build"
+```
+
+Then build your Docker image with the compiled assets included.
+
+### Option B: Multi-stage Docker Build
+Uncomment the `assets` stage in the `Dockerfile` to build assets during the Docker build process:
+
+1. **Uncomment the assets stage** (lines 52-60 in Dockerfile):
+   ```dockerfile
+   FROM node:20-alpine AS assets
+   WORKDIR /app
+   COPY package*.json yarn.lock* ./
+   RUN corepack enable && \
+       if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
+       else npm ci; fi
+   COPY . .
+   RUN if [ -f yarn.lock ]; then yarn build; \
+       else npm run build; fi
+   ```
+
+2. **Uncomment the COPY command** in the deploy stage (line 69):
+   ```dockerfile
+   COPY --from=assets --chown=www-data:www-data /app/public/build /var/www/html/public/build
+   ```
+
+3. **Build your image**:
+   ```bash
+   docker build --target deploy -t myapp:latest .
+   ```
+
+**Note:** Do not add the Node service to `docker-compose.prod.yml` - it's only needed for development.
 
 ## 🚀 Running Laravel Specific Commands
 In development, you may want to run artisan commands or composer commands. We can use [`spin run`](https://serversideup.net/open-source/spin/docs/command-reference/run) or [`spin exec`](https://serversideup.net/open-source/spin/docs/command-reference/exec) to run these commands.
