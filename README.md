@@ -69,7 +69,7 @@ This template includes the following services configured and ready to use:
 
 ### MariaDB 12
 - **Development**: Available at `localhost:3306`
-- **Connection**: Configured via environment variables in `.env.example`
+- **Connection**: Configured via environment variables in `.env.example.spin`
 - **Persistence**: Data stored in Docker volume `mariadb-data`
 - **Health Checks**: Automatically ensures database is ready before starting dependent services
 - **Production**: Runs with resource limits and automatic restarts
@@ -127,7 +127,7 @@ spin exec php php artisan reverb:install
 
 ### Configuration
 
-Reverb is already configured in `.env.example`. Ensure your Laravel project has these settings:
+Reverb is already configured in `.env.example.spin`. Ensure your Laravel project has these settings:
 
 ```env
 BROADCAST_CONNECTION=reverb
@@ -231,7 +231,7 @@ docker compose logs -f queue
 By default, this template is configured to use `spin deploy` which defaults to the `production` environment. You need to create an `.env.production` file in the root of your project.
 
 ```bash
-cp .env.example .env.production
+cp .env.example.spin .env.production
 ```
 
 Configure your `.env.production` file with the appropriate values for your production environment:

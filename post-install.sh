@@ -33,20 +33,20 @@ use_github_actions=""
 add_php_extensions() {
     echo "${BLUE}Adding custom PHP extensions...${RESET}"
     local dockerfile="$project_dir/$php_dockerfile"
-    
+
     # Check if Dockerfile exists
     if [ ! -f "$dockerfile" ]; then
         echo "Error: $dockerfile not found."
         return 1
     fi
-    
+
     # Uncomment the USER root line
     line_in_file --action replace --file "$dockerfile" "# USER root" "USER root"
-    
+
     # Add RUN command to install extensions
     local extensions_string="${php_extensions[*]}"
     line_in_file --action replace --file "$dockerfile" "# RUN install-php-extensions" "RUN install-php-extensions $extensions_string"
-    
+
     echo "Custom PHP extensions added."
 }
 
@@ -80,8 +80,8 @@ configure_sqlite() {
         mkdir -p "$project_dir/.infrastructure/volume_data/sqlite"
 
         echo "$service_name: Updating the Laravel .env and .env.example files..."
-        line_in_file --action replace --file "$project_dir/.env" --file "$project_dir/.env.example" "DB_CONNECTION" "DB_CONNECTION=sqlite"
-        line_in_file --action after --file "$project_dir/.env" --file "$project_dir/.env.example" "DB_CONNECTION" "DB_DATABASE=/var/www/html/.infrastructure/volume_data/sqlite/database.sqlite"
+        line_in_file --action replace --file "$project_dir/.env" --file "$project_dir/.env.example.spin" "DB_CONNECTION" "DB_CONNECTION=sqlite"
+        line_in_file --action after --file "$project_dir/.env" --file "$project_dir/.env.example.spin" "DB_CONNECTION" "DB_DATABASE=/var/www/html/.infrastructure/volume_data/sqlite/database.sqlite"
 
         # Check if the default Laravel SQLite database exists and the Spin SQLite database doesn't
         if [[ -f "$laravel_default_sqlite_database_path" && ! -f "$spin_sqlite_database_path" ]]; then
@@ -136,94 +136,96 @@ install_node_dependencies() {
     fi
 }
 
-process_selections() { 
-    [[ $sqlite ]] && configure_sqlite
-    
-    if [ "$spin_template_type" = "pro" ]; then
-        sleep 0.5  # Small delay before processing service configurations
-        [[ $schedule ]] && configure_schedule
-        [[ $mysql ]] && configure_mysql
-        [[ $mariadb ]] && configure_mariadb
-        [[ $postgresql ]] && configure_postgresql
-        [[ $redis ]] && configure_redis
-        [[ $meilisearch ]] && configure_meilisearch
-        [[ $horizon ]] && configure_horizon
-        [[ $queue ]] && configure_queue
-        [[ $reverb ]] && configure_reverb
-        [[ $use_github_actions ]] && configure_github_actions
-    fi
+process_selections() {
+    # [[ $sqlite ]] && configure_sqlite
+
+#    if [ "$spin_template_type" = "pro" ]; then
+#        sleep 0.5  # Small delay before processing service configurations
+#        [[ $schedule ]] && configure_schedule
+#        [[ $mysql ]] && configure_mysql
+#        [[ $mariadb ]] && configure_mariadb
+#        [[ $postgresql ]] && configure_postgresql
+#        [[ $redis ]] && configure_redis
+#        [[ $meilisearch ]] && configure_meilisearch
+#        [[ $horizon ]] && configure_horizon
+#        [[ $queue ]] && configure_queue
+#        [[ $reverb ]] && configure_reverb
+#        [[ $use_github_actions ]] && configure_github_actions
+#    fi
     echo "Services configured."
 }
 
 select_database() {
-    local selection_made=false
-    while ! $selection_made; do
-        clear
-        echo "${BOLD}${YELLOW}What database engine(s) would you like to use?${RESET}"
-        echo -e "${sqlite:+$BOLD$BLUE}1) SQLite${RESET}"
-        if [ "$spin_template_type" = "pro" ]; then
-            echo -e "${mysql:+$BOLD$BLUE}2) MySQL${RESET}"
-            echo -e "${mariadb:+$BOLD$BLUE}3) MariaDB${RESET}"
-            echo -e "${postgresql:+$BOLD$BLUE}4) PostgreSQL${RESET}"
-            if [[ $horizon ]]; then
-                echo -e "${BOLD}${BLUE}5) Redis (Required for Horizon)${RESET}"
-            else
-                echo -e "${redis:+$BOLD$BLUE}5) Redis${RESET}"
-            fi
-        else
-            echo -e "${DIM}2) MySQL (Pro)${RESET}"
-            echo -e "${DIM}3) MariaDB (Pro)${RESET}"
-            echo -e "${DIM}4) PostgreSQL (Pro)${RESET}"
-            echo -e "${DIM}5) Redis (Pro)${RESET}"
-        fi
-        show_spin_pro_notice
-        echo "Press a number to select/deselect. Press ${BOLD}${BLUE}ENTER${RESET} to continue."
-
-        read -s -n 1 key
-        case $key in
-            1) 
-                if [[ $sqlite ]]; then
-                    sqlite=""
-                else
-                    sqlite="1"
-                fi
-                ;;
-            2) 
-                if [ "$spin_template_type" = "pro" ]; then
-                    [[ $mysql ]] && mysql="" || mysql="1"
-                    docker_compose_database_migration="true"
-                fi
-                ;;
-            3) 
-                if [ "$spin_template_type" = "pro" ]; then
-                    [[ $mariadb ]] && mariadb="" || mariadb="1"
-                    docker_compose_database_migration="true"
-                fi
-                ;;
-            4) 
-                if [ "$spin_template_type" = "pro" ]; then
-                    [[ $postgresql ]] && postgresql="" || postgresql="1"
-                    docker_compose_database_migration="true"
-                fi
-                ;;
-            5) 
-                if [ "$spin_template_type" = "pro" ]; then
-                    if [[ ! $horizon ]]; then
-                        [[ $redis ]] && redis="" || redis="1"
-                    fi
-                fi
-                ;;
-            '') 
-                if [ "$spin_template_type" = "pro" ] && [[ $horizon && ! $redis ]]; then
-                    echo -e "${RED}Redis is required for Horizon. Redis has been automatically selected.${RESET}"
-                    redis="1"
-                    read -n 1 -s -r -p "Press any key to continue..."
-                else
-                    selection_made=true
-                fi
-                ;;
-        esac
-    done
+#    local selection_made=false
+#    while ! $selection_made; do
+#        clear
+#        echo "${BOLD}${YELLOW}What database engine(s) would you like to use?${RESET}"
+#        echo -e "${sqlite:+$BOLD$BLUE}1) SQLite${RESET}"
+#        if [ "$spin_template_type" = "pro" ]; then
+#            echo -e "${mysql:+$BOLD$BLUE}2) MySQL${RESET}"
+#            echo -e "${mariadb:+$BOLD$BLUE}3) MariaDB${RESET}"
+#            echo -e "${postgresql:+$BOLD$BLUE}4) PostgreSQL${RESET}"
+#            if [[ $horizon ]]; then
+#                echo -e "${BOLD}${BLUE}5) Redis (Required for Horizon)${RESET}"
+#            else
+#                echo -e "${redis:+$BOLD$BLUE}5) Redis${RESET}"
+#            fi
+#        else
+#            echo -e "${DIM}2) MySQL (Pro)${RESET}"
+#            echo -e "${DIM}3) MariaDB (Pro)${RESET}"
+#            echo -e "${DIM}4) PostgreSQL (Pro)${RESET}"
+#            echo -e "${DIM}5) Redis (Pro)${RESET}"
+#        fi
+#        show_spin_pro_notice
+#        echo "Press a number to select/deselect. Press ${BOLD}${BLUE}ENTER${RESET} to continue."
+#
+#        read -s -n 1 key
+#        case $key in
+#            1)
+#                if [[ $sqlite ]]; then
+#                    sqlite=""
+#                else
+#                    sqlite="1"
+#                fi
+#                ;;
+#            2)
+#                if [ "$spin_template_type" = "pro" ]; then
+#                    [[ $mysql ]] && mysql="" || mysql="1"
+#                    docker_compose_database_migration="true"
+#                fi
+#                ;;
+#            3)
+#                if [ "$spin_template_type" = "pro" ]; then
+#                    [[ $mariadb ]] && mariadb="" || mariadb="1"
+#                    docker_compose_database_migration="true"
+#                fi
+#                ;;
+#            4)
+#                if [ "$spin_template_type" = "pro" ]; then
+#                    [[ $postgresql ]] && postgresql="" || postgresql="1"
+#                    docker_compose_database_migration="true"
+#                fi
+#                ;;
+#            5)
+#                if [ "$spin_template_type" = "pro" ]; then
+#                    if [[ ! $horizon ]]; then
+#                        [[ $redis ]] && redis="" || redis="1"
+#                    fi
+#                fi
+#                ;;
+#            '')
+#                if [ "$spin_template_type" = "pro" ] && [[ $horizon && ! $redis ]]; then
+#                    echo -e "${RED}Redis is required for Horizon. Redis has been automatically selected.${RESET}"
+#                    redis="1"
+#                    read -n 1 -s -r -p "Press any key to continue..."
+#                else
+#                    selection_made=true
+#                fi
+#                ;;
+#        esac
+#    done
+    sqlite=""
+    docker_compose_database_migration="true"
 }
 
 select_features() {
@@ -249,12 +251,12 @@ select_features() {
 
         read -s -r -n 1 key
         case $key in
-            1) 
+            1)
                 if [ "$spin_template_type" = "pro" ]; then
                     [[ $schedule ]] && schedule="" || schedule="1"
                 fi
                 ;;
-            2) 
+            2)
                 if [ "$spin_template_type" = "pro" ]; then
                     if [[ $horizon ]]; then
                         horizon=""
@@ -265,17 +267,17 @@ select_features() {
                     fi
                 fi
                 ;;
-            3) 
+            3)
                 if [ "$spin_template_type" = "pro" ]; then
                     [[ $queue ]] && queue="" || queue="1"
                 fi
                 ;;
-            4) 
+            4)
                 if [ "$spin_template_type" = "pro" ]; then
                     [[ $reverb ]] && reverb="" || reverb="1"
                 fi
                 ;;
-            5) 
+            5)
                 if [ "$spin_template_type" = "pro" ]; then
                     [[ $meilisearch ]] && meilisearch="" || meilisearch="1"
                 fi
@@ -307,7 +309,7 @@ select_github_actions() {
 
         read -s -n 1 key
         case $key in
-            1) 
+            1)
                 if [ "$spin_template_type" = "pro" ]; then
                     use_github_actions="1"
                 fi
@@ -479,14 +481,16 @@ show_spin_pro_notice() {
 
 set_colors
 select_php_extensions
-select_features
-select_javascript_package_manager
+#select_features
+#select_javascript_package_manager
 select_database
-if [ "$docker_compose_database_migration" = "true" ] && [ "$spin_template_type" == "pro" ]; then
+
+#if [ "$docker_compose_database_migration" = "true" ] && [ "$spin_template_type" == "pro" ]; then
+if [ "$docker_compose_database_migration" = "true" ]; then
     select_auto_migrations
     line_in_file --action after --file "$project_dir/docker-compose.prod.yml" "      AUTORUN_ENABLED: \"true\"" "      AUTORUN_LARAVEL_MIGRATION: \"true\""
 fi
-select_github_actions
+#select_github_actions
 
 # Clean up the screen before moving forward
 clear
@@ -539,7 +543,7 @@ if [ "$spin_template_type" == "pro" ]; then
     fi
 
     # Configure APP_URL
-    line_in_file --action replace --file "$project_dir/.env" --file "$project_dir/.env.example" "APP_URL" "APP_URL=https://laravel.dev.test"
+    line_in_file --action replace --file "$project_dir/.env" --file "$project_dir/.env.example.spin" "APP_URL" "APP_URL=https://laravel.dev.test"
 
     configure_mailpit
 fi
@@ -551,14 +555,21 @@ line_in_file --action exact --ignore-missing --file "$project_dir/.spin.yml" "ch
 if [[ "$SPIN_INSTALL_DEPENDENCIES" == "true" ]]; then
     install_node_dependencies
 
-    if [[ "$docker_compose_database_migration" == "true" ]]; then
-        initialize_database_service
-    fi
+    #if [[ "$docker_compose_database_migration" == "true" ]]; then
+    #    initialize_database_service
+    #fi
+    #spin exec php php artisan migrate
 fi
 
 if [[ ! -d "$project_dir/.git" ]]; then
     initialize_git_repository
 fi
+# Copy .env.example.spin to .env to ensure the new project uses the updated configuration
+echo "Copying over the env"
+cp "$project_dir/.env.example.spin" "$project_dir/.env"
+read -p "Enter Docker image name: " image_name
+sed -i '' "s|^IMAGE_NAME ?=.*|IMAGE_NAME ?= $image_name|" Makefile
+echo "Updated IMAGE_NAME in Makefile to $image_name"
 
 # Export actions so it's available to the main Spin script
 export SPIN_USER_TODOS
