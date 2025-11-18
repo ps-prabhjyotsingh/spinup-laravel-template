@@ -11,6 +11,17 @@ services:
       - ./.infrastructure/conf/traefik/dev/traefik.yml:/traefik.yml:ro
       - ./.infrastructure/conf/traefik/dev/traefik-certs.yml:/traefik-certs.yml
       - ./.infrastructure/conf/traefik/dev/certificates/:/certificates
+  phpmyadmin:
+    image: linuxserver/phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mariadb
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    networks:
+      - development
+    depends_on:
+      - mariadb
 
   mariadb:
     image: mariadb:12
@@ -148,7 +159,7 @@ services:
     restart: "no"
     profiles:
       - reverb
-  
+
   node:
     image: node:20-alpine
     working_dir: /var/www/html
