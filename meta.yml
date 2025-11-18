@@ -1,8 +1,7 @@
 ---
-title: Laravel Basic Template
+title: Laravel Spin Template with Queue and Reverb
 authors:
-  - Jay Rogers (@jaydrogers)
-  - Dan Pastori (@danpastori)
-description: The official Laravel Spin template when you run `spin new laravel` from CLI.
-repository: https://github.com/serversideup/spin-template-laravel-basic
-issues: https://github.com/serversideup/spin-template-laravel-basic/issues
+  - Prabhjyot Singh (@ps-prabhjyotsingh)
+description: The Laravel Spin template with queue and reverb pre-configured
+repository: https://github.com/ps-prabhjyotsingh
+issues: https://github.com/ps-prabhjyotsingh/spin-template-laravel-basic/issues

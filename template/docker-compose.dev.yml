@@ -11,6 +11,53 @@ services:
       - ./.infrastructure/conf/traefik/dev/traefik.yml:/traefik.yml:ro
       - ./.infrastructure/conf/traefik/dev/traefik-certs.yml:/traefik-certs.yml
       - ./.infrastructure/conf/traefik/dev/certificates/:/certificates
+  phpmyadmin:
+    image: linuxserver/phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mariadb
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    networks:
+      - development
+    depends_on:
+      - mariadb
+
+  mariadb:
+    image: mariadb:12
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: ${DB_DATABASE:-laravel}
+      MARIADB_USER: ${DB_USERNAME:-laravel}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - development
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - development
+    restart: unless-stopped
 
   php:
     build:
@@ -23,28 +70,131 @@ services:
     networks:
       - development
     depends_on:
-      - traefik
+      traefik:
+        condition: service_started
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_CONNECTION: ${DB_CONNECTION:-mysql}
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-laravel}
+      DB_USERNAME: ${DB_USERNAME:-laravel}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.laravel.rule=HostRegexp(`localhost`)"
       - "traefik.http.routers.laravel.entrypoints=web"
       - "traefik.http.services.laravel.loadbalancer.server.port=8080"
       - "traefik.http.services.laravel.loadbalancer.server.scheme=http"
-  
-  node:
-    image: node:22
+
+  queue:
+    build:
+      target: development
+      args:
+        USER_ID: ${SPIN_USER_ID}
+        GROUP_ID: ${SPIN_GROUP_ID}
+    working_dir: /var/www/html
     volumes:
-      - .:/usr/src/app/
-    working_dir: /usr/src/app/
-    networks: 
+      - .:/var/www/html/
+    command: php artisan queue:work --sleep=3 --timeout=120 --tries=3 --max-time=3600
+    environment:
+      APP_ENV: local
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      DB_CONNECTION: ${DB_CONNECTION:-mysql}
+      DB_HOST: ${DB_HOST:-mariadb}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-laravel}
+      DB_USERNAME: ${DB_USERNAME:-laravel}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
       - development
 
+  reverb:
+    build:
+      target: development
+      args:
+        USER_ID: ${SPIN_USER_ID}
+        GROUP_ID: ${SPIN_GROUP_ID}
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html/
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    environment:
+      APP_ENV: local
+      BROADCAST_CONNECTION: reverb
+      REVERB_HOST: ${REVERB_HOST:-reverb.localhost}
+      REVERB_PORT: ${REVERB_PORT:-80}
+      REVERB_SCHEME: ${REVERB_SCHEME:-http}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    expose:
+      - "8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.reverb.rule=Host(`${REVERB_HOST:-reverb.localhost}`)"
+      - "traefik.http.routers.reverb.entrypoints=web"
+      - "traefik.http.services.reverb.loadbalancer.server.port=8080"
+    networks:
+      - development
+    # Disabled by default - enable after: composer require laravel/reverb && php artisan reverb:install
+    restart: "no"
+    profiles:
+      - reverb
+
+  node:
+    image: node:20-alpine
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html/
+    environment:
+      - VITE_HOST=0.0.0.0
+      - VITE_PORT=5173
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "5173:5173"
+    networks:
+      - development
+    # Don't restart automatically - run manually with: spin exec node npm run dev
+    restart: "no"
+    profiles:
+      - tools
+
   mailpit:
-      image: axllent/mailpit
-      networks:
-        - development
-      ports:
-        - "8025:8025"
+    image: axllent/mailpit:latest
+    networks:
+      - development
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mailpit.rule=Host(`${MAILPIT_HOST:-mailpit.localhost}`)"
+      - "traefik.http.routers.mailpit.entrypoints=web"
+      - "traefik.http.services.mailpit.loadbalancer.server.port=8025"
+    restart: unless-stopped
+
+volumes:
+  mariadb-data:
+  redis-data:
 
 networks:
   development:
