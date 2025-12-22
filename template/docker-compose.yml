@@ -1,8 +1,6 @@
 services:
 
-  traefik:
-    image: traefik:v3.5
-
-  php:
-    depends_on:
-      - traefik
+  #  traefik:
+  #    image: traefik:v3.5
+  #    profiles: ["development"]
+  php: {}

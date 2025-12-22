@@ -38,17 +38,17 @@ SESSION_DOMAIN=null
 
 # Broadcasting / Laravel Reverb (set to 'reverb' after installing laravel/reverb package)
 BROADCAST_CONNECTION=log
-REVERB_APP_ID=my-app-id
-REVERB_APP_KEY=my-app-key
-REVERB_APP_SECRET=my-app-secret
-REVERB_HOST=reverb.localhost
-REVERB_PORT=80
-REVERB_SCHEME=http
+#REVERB_APP_ID=my-app-id
+#REVERB_APP_KEY=my-app-key
+#REVERB_APP_SECRET=my-app-secret
+#REVERB_HOST=reverb.localhost
+#REVERB_PORT=80
+#REVERB_SCHEME=http
 
-VITE_REVERB_APP_KEY="${REVERB_APP_KEY}"
-VITE_REVERB_HOST="${REVERB_HOST}"
-VITE_REVERB_PORT="${REVERB_PORT}"
-VITE_REVERB_SCHEME="${REVERB_SCHEME}"
+#VITE_REVERB_APP_KEY="${REVERB_APP_KEY}"
+#VITE_REVERB_HOST="${REVERB_HOST}"
+#VITE_REVERB_PORT="${REVERB_PORT}"
+#VITE_REVERB_SCHEME="${REVERB_SCHEME}"
 
 # Cache (using Redis - no migrations required)
 CACHE_STORE=redis
@@ -95,3 +95,11 @@ ALLOWED_API_IPS=127.0.0.1,::1
 
 # Mailpit (dev only)
 MAILPIT_HOST=mailpit.localhost
+COMPOSE_PROJECT_NAME=laravelspinapp
+SPIN_USER_ID=9999
+SPIN_GROUP_ID=9999
+REGISTRY_URL=#registry.something.com
+IMAGE_NAME=#registry.something.com/abc/def
+TAG=#latest
+DOCKER_STACK_NAME=testinglaravelstack
+PHPMYADMIN_DOMAIN=#something.com
