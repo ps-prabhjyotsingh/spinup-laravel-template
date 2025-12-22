@@ -1,0 +1,30 @@
+users:
+  - username: someuser
+    name: "Nice user"
+    groups: ['sudo']
+    authorized_keys:
+      - public_key: "somepublickey"
+
+servers:
+  - server_name: somenewserver
+    environment: production
+    address: 1.1.1.1
+
+  - server_name: swarmserver
+    environment: staging
+    address: 2.2.2.2
+
+
+environments:
+  - name: production
+  - name: staging
+
+
+# Timezone and contact settings
+server_timezone: "Etc/UTC"
+server_contact: someemail
+
+# If you the SSH port below, you may need to run `spin provision -p <your-default-ssh-port>`
+# to get a connection on your first provision. Otherwise, SSH will try connecting
+# to your new port before the SSH server configuration is updated.
+ssh_port: "22"

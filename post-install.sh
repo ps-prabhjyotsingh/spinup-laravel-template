@@ -549,7 +549,6 @@ if [ "$spin_template_type" == "pro" ]; then
 fi
 
 # Configure Server Contact
-line_in_file --action exact --ignore-missing --file "$project_dir/.infrastructure/conf/traefik/prod/traefik.yml" "changeme@example.com" "$SERVER_CONTACT"
 line_in_file --action exact --ignore-missing --file "$project_dir/.spin.yml" "changeme@example.com" "$SERVER_CONTACT"
 
 if [[ "$SPIN_INSTALL_DEPENDENCIES" == "true" ]]; then
@@ -567,9 +566,6 @@ fi
 # Copy .env.example.spin to .env to ensure the new project uses the updated configuration
 echo "Copying over the env"
 cp "$project_dir/.env.example.spin" "$project_dir/.env"
-read -p "Enter Docker image name: " image_name
-sed -i '' "s|^IMAGE_NAME ?=.*|IMAGE_NAME ?= $image_name|" Makefile
-echo "Updated IMAGE_NAME in Makefile to $image_name"
 
 # Export actions so it's available to the main Spin script
 export SPIN_USER_TODOS

@@ -1,4 +1,5 @@
-.PHONY: help up build generate-key multiarch-build multiarch-push clean setup-builder build-dev platforms registry-info buildx-status reset-builder
+include .env
+.PHONY: help up build down setup-laravel deploy generate-key multiarch-build multiarch-push clean setup-builder build-dev platforms registry-info buildx-status reset-builder
 
 # Default target
 help: ## Show this help message
@@ -6,12 +7,9 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # Variables
-IMAGE_NAME ?=
-TAG ?= latest
 PLATFORMS ?= linux/amd64,linux/arm64
 DOCKERFILE ?= Dockerfile
 BUILDER_NAME ?= multiarch-builder
-INSECURE_REGISTRY ?= registry.amaavi.casa
 
 
 # Setup multiarch builder
@@ -20,7 +18,7 @@ setup-builder: ## Setup Docker buildx builder for multiarch builds with insecure
 	@if ! docker buildx inspect $(BUILDER_NAME) >/dev/null 2>&1; then \
 		echo "Creating new buildx builder: $(BUILDER_NAME)"; \
 		docker buildx create --name $(BUILDER_NAME) \
-			--buildkitd-config-inline="{\"registry\": {\"registry.amaavi.casa\": {\"insecure\": true,\"http\": false}}}" \
+			--buildkitd-config-inline="{\"registry\": {\"$(REGISTRY_URL)\": {\"insecure\": true,\"http\": false}}}" \
 			--use || { \
 			echo "Failed to create $(BUILDER_NAME), trying with default builder"; \
 			docker buildx create --name $(BUILDER_NAME) --use; \
@@ -93,15 +91,6 @@ platforms: ## Show available platforms for multiarch builds
 	@echo "Current PLATFORMS variable: $(PLATFORMS)"
 	@echo "You can override with: make multiarch-build PLATFORMS=\"linux/amd64,linux/arm64\""
 
-# Show registry configuration
-registry-info: ## Show current registry configuration
-	@echo "Registry Configuration:"
-	@echo "  IMAGE_NAME: $(IMAGE_NAME)"
-	@echo "  INSECURE_REGISTRY: $(INSECURE_REGISTRY)"
-	@echo ""
-	@echo "The builder is configured to allow insecure access to $(INSECURE_REGISTRY)"
-	@echo "You can override the registry with: make multiarch-push IMAGE_NAME=\"your-registry/image\""
-
 # Check buildx status and available builders
 buildx-status: ## Check Docker buildx status and available builders
 	@echo "Docker buildx version:"
@@ -121,5 +110,38 @@ reset-builder: ## Reset to default Docker builder
 
 up:
 	@spin up -d
+
+down:
+	@spin down
+
+deploy-staging: up
+	@if [ ! -f .env.staging ]; then echo "Error: .env.staging file not found"; exit 1; fi
+	@echo "Checking if APP_KEY is set in .env.staging..."
+	@APP_KEY=$$(grep -E "^APP_KEY=" .env.staging | cut -d'=' -f2- | sed 's/^"//; s/"$$//; s/^'"'"'//; s/'"'"'$$//'); \
+	if [ -z "$$APP_KEY" ]; then \
+		echo "APP_KEY is empty, generating new key..."; \
+		spin exec php php artisan key:generate --env=staging; \
+	else \
+		echo "APP_KEY is already set, skipping key generation"; \
+	fi
+	@SPIN_PROJECT_NAME=${DOCKER_STACK_NAME} spin deploy staging
+
+deploy: up
+	@if [ ! -f .env.production ]; then echo "Error: .env.production file not found"; exit 1; fi
+	@echo "Checking if APP_KEY is set in .env.production..."
+	@APP_KEY=$$(grep -E "^APP_KEY=" .env.production | cut -d'=' -f2- | sed 's/^"//; s/"$$//; s/^'"'"'//; s/'"'"'$$//'); \
+	if [ -z "$$APP_KEY" ]; then \
+		echo "APP_KEY is empty, generating new key..."; \
+		spin exec php php artisan key:generate --env=production; \
+	else \
+		echo "APP_KEY is already set, skipping key generation"; \
+	fi
+	@SPIN_PROJECT_NAME=${DOCKER_STACK_NAME} spin deploy production
+
 generate-key:
 	@spin exec php php artisan key:generate
+
+setup-laravel: generate-key
+	@spin exec php php artisan migrate:fresh --seed
+	@spin exec php php artisan cache:clear
+	@spin exec php php artisan config:clear

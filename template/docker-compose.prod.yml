@@ -1,33 +1,4 @@
 services:
-
-  traefik:
-    ports:
-      - target: 80
-        published: 80
-        protocol: tcp
-        mode: host
-      - target: 443
-        published: 443
-        protocol: tcp
-        mode: host
-    networks:
-        - web-public
-    deploy:
-      update_config:
-        parallelism: 1
-        delay: 5s
-        order: stop-first
-      placement:
-        constraints:
-          - node.role==manager
-    volumes:
-      # Mount the Docker socket as read-only so Traefik can listen to events
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - certificates:/certificates
-    configs:
-      - source: traefik
-        target: /etc/traefik/traefik.yml
-
   mariadb:
     image: mariadb:12
     environment:
@@ -43,7 +14,19 @@ services:
       timeout: 5s
       retries: 30
     networks:
-      - web-public
+      laravelapp-network:
+        aliases:
+          - db
+
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=256000000
+      --max-connections=500
+      --slow-query-log=1
+      --slow-query-log-file=/var/log/mysql/slow.log
+      --long-query-time=5
+      --max_allowed_packet=256000000
     deploy:
       mode: replicated
       replicas: 1
@@ -52,9 +35,6 @@ services:
         delay: 5s
         max_attempts: 10
         window: 120s
-      placement:
-        constraints:
-          - node.role == worker
 
   redis:
     image: redis:7-alpine
@@ -66,12 +46,12 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "sh", "-c", "redis-cli $${REDIS_PASSWORD:+-a $$REDIS_PASSWORD} ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 30
     networks:
-      - web-public
+      - laravelapp-network
     deploy:
       mode: replicated
       replicas: 1
@@ -81,6 +61,46 @@ services:
         max_attempts: 10
         window: 120s
 
+#  phpmyadmin:
+#    image: linuxserver/phpmyadmin
+##    ports:
+##      - "8080:80"
+#    healthcheck:
+#      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 3
+#      start_period: 40s
+#    environment:
+#      PMA_HOST: db
+#      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+#    networks:
+#      - inbound
+#      - laravelapp-network
+#    deploy:
+#      replicas: 1
+#      update_config:
+#        failure_action: rollback
+#        parallelism: 1
+#        delay: 5s
+#        order: start-first
+#      restart_policy:
+#        condition: any
+#        delay: 10s
+#        max_attempts: 3
+#        window: 120s
+#      labels:
+#        - "traefik.enable=true"
+#        - "traefik.http.routers.appmyadmin.rule=Host(`${PHPMYADMIN_DOMAIN}`)"
+#        - "traefik.http.routers.appmyadmin.entrypoints=websecure"
+#        - "traefik.http.routers.appmyadmin.tls=true"
+#        #        - "traefik.http.routers.appmyadmin.tls.certresolver=letsencryptresolver"
+#        - "traefik.http.services.appmyadmin.loadbalancer.server.port=80"
+#        - "traefik.http.services.appmyadmin.loadbalancer.server.scheme=http"
+#    depends_on:
+#      - mariadb
+#
+
   php:
     image: ${SPIN_IMAGE_DOCKERFILE} # 👈 Change this if you're not using `spin deploy`
     environment:
@@ -88,18 +108,27 @@ services:
       AUTORUN_ENABLED: "true" # 👈 Remove this line if you don't want Laravel Automations
       APP_ENV: "${SPIN_DEPLOYMENT_ENVIRONMENT}" # 👈 Remove this if you're not using `spin deploy`
       HEALTHCHECK_PATH: "/up" # Use Laravel's built-in health route
-      SSL_MODE: full
+      #SSL_MODE: full
       DB_CONNECTION: ${DB_CONNECTION:-mysql}
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
       DB_DATABASE: ${DB_DATABASE}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+#      REDIS_HOST: ${REDIS_HOST}
+#      REDIS_PORT: ${REDIS_PORT}
+#      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/up || nc -z localhost 9000 || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    depends_on:
+      - mariadb
     networks:
-      - web-public
+      - laravelapp-network
+      - inbound
     volumes:
       - "storage_private:/var/www/html/storage/app/private/"
       - "storage_public:/var/www/html/storage/app/public/"
@@ -123,38 +152,48 @@ services:
         window: 120s
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.my-php-app.rule=Host(`${SPIN_APP_DOMAIN}`)"
-        - "traefik.http.routers.my-php-app.entrypoints=websecure"
-        - "traefik.http.routers.my-php-app.tls=true"
-        - "traefik.http.routers.my-php-app.tls.certresolver=letsencryptresolver"
-        - "traefik.http.services.my-php-app.loadbalancer.server.port=8443"
-        - "traefik.http.services.my-php-app.loadbalancer.server.scheme=https"
+        - "traefik.http.routers.laravelapp.rule=Host(`${SPIN_APP_DOMAIN}`)"
+        - "traefik.http.routers.laravelapp.entrypoints=websecure"
+        - "traefik.http.routers.laravelapp.tls=true"
+#        - "traefik.http.routers.laravelapp.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.laravelapp.loadbalancer.server.port=8080"
+        - "traefik.http.services.laravelapp.loadbalancer.server.scheme=http"
         # Health check
-        - "traefik.http.services.my-php-app.loadbalancer.healthcheck.path=/up"
-        - "traefik.http.services.my-php-app.loadbalancer.healthcheck.interval=30s"
-        - "traefik.http.services.my-php-app.loadbalancer.healthcheck.timeout=5s"
-        - "traefik.http.services.my-php-app.loadbalancer.healthcheck.scheme=http"
+        - "traefik.http.services.laravelapp.loadbalancer.healthcheck.path=/up"
+        - "traefik.http.services.laravelapp.loadbalancer.healthcheck.interval=30s"
+        - "traefik.http.services.laravelapp.loadbalancer.healthcheck.timeout=5s"
+        - "traefik.http.services.laravelapp.loadbalancer.healthcheck.scheme=http"
 
   queue:
     image: ${SPIN_IMAGE_DOCKERFILE}
     command: php artisan queue:work --sleep=3 --timeout=120 --tries=3
     environment:
+      PHP_OPCACHE_ENABLE: "1"
       APP_ENV: ${SPIN_DEPLOYMENT_ENVIRONMENT:-production}
-      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-database}
+#      REDIS_HOST: ${REDIS_HOST}
+#      REDIS_PORT: ${REDIS_PORT}
+#      REDIS_PASSWORD: ${REDIS_PASSWORD}
       DB_CONNECTION: ${DB_CONNECTION:-mysql}
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
       DB_DATABASE: ${DB_DATABASE}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: [ "CMD", "healthcheck-queue" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - mariadb
     networks:
-      - web-public
+      - laravelapp-network
+#      - inbound
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -168,52 +207,47 @@ services:
           cpus: "0.10"
           memory: 128M
 
-  reverb:
-    image: ${SPIN_IMAGE_DOCKERFILE}
-    command: php artisan reverb:start --host=0.0.0.0 --port=8080
-    environment:
-      APP_ENV: ${SPIN_DEPLOYMENT_ENVIRONMENT:-production}
-      BROADCAST_CONNECTION: reverb
-      REVERB_HOST: ${REVERB_HOST}
-      REVERB_PORT: ${REVERB_PORT:-8080}
-      REVERB_SCHEME: ${REVERB_SCHEME:-https}
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    expose:
-      - "8080"
-    networks:
-      - web-public
-    deploy:
-      mode: replicated
-      replicas: 2
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 10
-        window: 120s
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 512M
-        reservations:
-          cpus: "0.10"
-          memory: 128M
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.reverb.rule=Host(`${REVERB_HOST}`)"
-        - "traefik.http.routers.reverb.entrypoints=websecure"
-        - "traefik.http.routers.reverb.tls=true"
-        - "traefik.http.routers.reverb.tls.certresolver=letsencryptresolver"
-        - "traefik.http.services.reverb.loadbalancer.server.port=8080"
-
-configs:
-  traefik:
-    name: "traefik-${SPIN_MD5_HASH_TRAEFIK_YML}.yml"
-    file: ./.infrastructure/conf/traefik/prod/traefik.yml
+#  reverb:
+#    image: ${SPIN_IMAGE_DOCKERFILE}
+#    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+#    environment:
+#      APP_ENV: ${SPIN_DEPLOYMENT_ENVIRONMENT:-production}
+#      BROADCAST_CONNECTION: reverb
+#      REVERB_HOST: ${REVERB_HOST}
+#      REVERB_PORT: ${REVERB_PORT}
+#      REVERB_SCHEME: ${REVERB_SCHEME}
+#      REDIS_HOST: ${REDIS_HOST}
+#      REDIS_PORT: ${REDIS_PORT}
+#      REDIS_PASSWORD: ${REDIS_PASSWORD}
+#    expose:
+#      - "8080"
+#    networks:
+##      - laravelapp-network
+#      - inbound
+#    deploy:
+#      mode: replicated
+#      replicas: 1
+#      restart_policy:
+#        condition: on-failure
+#        delay: 5s
+#        max_attempts: 10
+#        window: 120s
+#      resources:
+#        limits:
+#          cpus: "0.50"
+#          memory: 512M
+#        reservations:
+#          cpus: "0.10"
+#          memory: 128M
+#      labels:
+#        - "traefik.enable=true"
+#        - "traefik.http.routers.laravelreverb.rule=Host(`${REVERB_HOST}`)"
+#        - "traefik.http.routers.laravelreverb.entrypoints=websecure"
+#        - "traefik.http.routers.laravelreverb.tls=true"
+##        - "traefik.http.routers.laravelreverb.tls.certresolver=letsencryptresolver"
+#        - "traefik.http.services.laravelreverb.loadbalancer.server.port=8080"
 
 volumes:
-  certificates:
   storage_private:
   storage_public:
   storage_sessions:
@@ -223,4 +257,6 @@ volumes:
   redis-data:
 
 networks:
-  web-public:
+  laravelapp-network:
+  inbound:
+    external: true

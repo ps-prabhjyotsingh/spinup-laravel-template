@@ -1,20 +1,26 @@
 services:
-  traefik:
-    ports:
-    - "80:80"
-    - "443:443"
-    networks:
-      development:
-    volumes:
-      # Mount the Docker socket as read-only so Traefik can listen to events
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./.infrastructure/conf/traefik/dev/traefik.yml:/traefik.yml:ro
-      - ./.infrastructure/conf/traefik/dev/traefik-certs.yml:/traefik-certs.yml
-      - ./.infrastructure/conf/traefik/dev/certificates/:/certificates
+#  traefik:
+#    ports:
+#    - "80:80"
+#    - "443:443"
+#    networks:
+#      development:
+#    volumes:
+#      # Mount the Docker socket as read-only so Traefik can listen to events
+#      - /var/run/docker.sock:/var/run/docker.sock:ro
+#      - ./.infrastructure/conf/traefik/dev/traefik.yml:/traefik.yml:ro
+#      - ./.infrastructure/conf/traefik/dev/traefik-certs.yml:/traefik-certs.yml
+#      - ./.infrastructure/conf/traefik/dev/certificates/:/certificates
   phpmyadmin:
     image: linuxserver/phpmyadmin
     ports:
       - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     environment:
       PMA_HOST: mariadb
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
@@ -26,14 +32,14 @@ services:
   mariadb:
     image: mariadb:12
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
-      MARIADB_DATABASE: ${DB_DATABASE:-laravel}
-      MARIADB_USER: ${DB_USERNAME:-laravel}
-      MARIADB_PASSWORD: ${DB_PASSWORD:-secret}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_USER: ${DB_USERNAME}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mariadb-data:/var/lib/mysql
-    ports:
-      - "3306:3306"
+#    ports:
+#      - "3306:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -70,22 +76,22 @@ services:
     networks:
       - development
     depends_on:
-      traefik:
-        condition: service_started
       mariadb:
         condition: service_healthy
       redis:
         condition: service_healthy
+    ports:
+      - "8081:8080"
     environment:
       DB_CONNECTION: ${DB_CONNECTION:-mysql}
-      DB_HOST: ${DB_HOST:-mariadb}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_DATABASE: ${DB_DATABASE:-laravel}
-      DB_USERNAME: ${DB_USERNAME:-laravel}
-      DB_PASSWORD: ${DB_PASSWORD:-secret}
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.laravel.rule=HostRegexp(`localhost`)"
@@ -103,6 +109,12 @@ services:
     volumes:
       - .:/var/www/html/
     command: php artisan queue:work --sleep=3 --timeout=120 --tries=3 --max-time=3600
+    healthcheck:
+      test: [ "CMD", "healthcheck-queue" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     environment:
       APP_ENV: local
       QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}

@@ -9,7 +9,7 @@ FROM serversideup/php:8.3-fpm-nginx-alpine AS base
 ## Uncomment if you need to install additional PHP extensions
 # USER root
 # RUN install-php-extensions bcmath gd
-
+RUN apk add --no-cache nano mysql-client
 ############################################
 # Development Image
 ############################################
@@ -28,7 +28,7 @@ USER root
 RUN docker-php-serversideup-set-id www-data $USER_ID:$GROUP_ID  && \
     docker-php-serversideup-set-file-permissions --owner $USER_ID:$GROUP_ID --service nginx
 
-# Drop privileges back to www-data    
+# Drop privileges back to www-data
 USER www-data
 
 ############################################
